@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Papanku — Mini Kanban</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Kalam:wght@400;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="app-brand" aria-hidden="true"><span class="app-brand-mark">🪴</span>Papanku</span>
+        <button id="boardSwitcherBtn" class="board-switcher" aria-haspopup="listbox">
+          <span id="activeBoardTitle">Papan</span>
+          <span class="chev">▾</span>
+        </button>
+        <div id="boardMenu" class="board-menu" hidden></div>
+      </div>
+
+      <div class="topbar-search">
+        <input id="searchInput" type="search" placeholder="Cari judul atau catatan…" aria-label="Cari kartu" />
+        <button id="filterBtn" class="icon-btn" aria-haspopup="true" title="Saring kartu">⚙︎<span id="filterDot" class="filter-dot" hidden></span></button>
+        <div id="filterMenu" class="filter-menu" hidden></div>
+      </div>
+
+      <div class="topbar-right">
+        <button id="themeBtn" class="icon-btn" title="Ganti mode terang/gelap">🌗</button>
+        <button id="accentBtn" class="icon-btn" title="Pilih tema warna">🎨</button>
+        <div id="accentMenu" class="accent-menu" hidden></div>
+        <button id="dataBtn" class="icon-btn" title="Cadangan data">💾</button>
+        <div id="dataMenu" class="data-menu" hidden>
+          <button data-action="export">Ekspor ke JSON</button>
+          <label class="file-label">Impor dari JSON
+            <input id="importInput" type="file" accept="application/json" hidden />
+          </label>
+          <hr />
+          <button data-action="clear-all" class="danger">Hapus semua data</button>
+        </div>
+      </div>
+    </header>
+
+    <main id="board" class="board" tabindex="-1"></main>
+
+    <div id="dotIndicator" class="dot-indicator" hidden></div>
+
+    <button id="addColumnFab" class="fab" title="Tambah kolom">+</button>
+
+    <aside id="cardPanel" class="card-panel" hidden>
+      <div class="card-panel-inner"></div>
+    </aside>
+    <div id="scrim" class="scrim" hidden></div>
+
+    <div id="toast" class="toast" hidden></div>
+  </div>
+
+  <template id="tpl-empty-board">
+    <div class="empty-state">
+      <div class="empty-emoji">🗒️</div>
+      <p>Belum ada papan. Yuk buat satu untuk mulai mencatat!</p>
+      <button class="btn-primary" data-action="create-first-board">Buat Papan</button>
+    </div>
+  </template>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
