@@ -1,0 +1,767 @@
+openapi: 3.0.3
+info:
+  title: Mini Kanban API
+  description: >
+    Backend contract implied by frontend/js/api.js (currently a localStorage-backed
+    mock). Single-user, no accounts: per specs.md section 2.2 the app has no login,
+    no multi-user, and no server-side session — every endpoint below is unauthenticated.
+    Nearly every mutating endpoint returns the full application state, because the
+    frontend replaces its in-memory copy with whatever the call resolves to and
+    re-renders from that.
+  version: "1.0.0"
+servers:
+  - url: /api
+
+security: []
+
+tags:
+  - name: State
+  - name: Boards
+  - name: Columns
+  - name: Cards
+  - name: Labels
+  - name: Settings
+  - name: Backup
+
+paths:
+  /state:
+    get:
+      tags: [State]
+      operationId: getState
+      summary: Get the entire application state
+      description: Called once on load. No authentication required.
+      security: []
+      responses:
+        "200":
+          description: Full application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+
+  /boards:
+    post:
+      tags: [Boards]
+      operationId: createBoard
+      summary: Create a board and make it the active board
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  description: Falls back to "Papan Baru" if omitted or empty.
+                  example: Papan Baru
+      responses:
+        "200":
+          description: Updated application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+
+  /boards/{boardId}:
+    patch:
+      tags: [Boards]
+      operationId: renameBoard
+      summary: Rename a board
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/BoardId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+      responses:
+        "200":
+          description: Updated application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Boards]
+      operationId: deleteBoard
+      summary: Delete a board and everything in it
+      description: >
+        If the deleted board was the active board, the backend must pick a new
+        activeBoardId (the frontend expects the first remaining board, or null
+        if none remain) — the frontend does not send a replacement id itself.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/BoardId"
+      responses:
+        "200":
+          description: Updated application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /boards/{boardId}/activate:
+    post:
+      tags: [Boards]
+      operationId: setActiveBoard
+      summary: Set the active board
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/BoardId"
+      responses:
+        "200":
+          description: Updated application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /boards/{boardId}/columns:
+    post:
+      tags: [Columns]
+      operationId: createColumn
+      summary: Add a column to a board
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/BoardId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  description: Falls back to "Kolom Baru" if omitted or empty.
+                  example: Kolom Baru
+      responses:
+        "200":
+          description: Updated application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /boards/{boardId}/columns/reorder:
+    patch:
+      tags: [Columns]
+      operationId: reorderColumns
+      summary: Reorder every column in a board
+      description: >
+        The frontend always sends the complete column id order for the board
+        (the result of a drag-and-drop reorder), not a partial move.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/BoardId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [columnIds]
+              properties:
+                columnIds:
+                  type: array
+                  items:
+                    type: string
+                  description: All column ids belonging to this board, in the new order.
+      responses:
+        "200":
+          description: Updated application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /boards/{boardId}/columns/{columnId}:
+    patch:
+      tags: [Columns]
+      operationId: updateColumn
+      summary: Rename a column and/or change its WIP limit
+      description: >
+        Covers two frontend calls (renameColumn, setColumnWipLimit) that are
+        always issued independently, one field at a time — but both are PATCH
+        semantics against the same resource, so a backend may implement one
+        endpoint that accepts either or both fields.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/BoardId"
+        - $ref: "#/components/parameters/ColumnId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                wipLimit:
+                  type: integer
+                  nullable: true
+                  minimum: 1
+                  description: null means "no limit".
+      responses:
+        "200":
+          description: Updated application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Columns]
+      operationId: deleteColumn
+      summary: Delete a column and every card inside it
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/BoardId"
+        - $ref: "#/components/parameters/ColumnId"
+      responses:
+        "200":
+          description: Updated application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /boards/{boardId}/columns/{columnId}/cards:
+    post:
+      tags: [Cards]
+      operationId: createCard
+      summary: Quick-add a card at the end of a column
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/BoardId"
+        - $ref: "#/components/parameters/ColumnId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                  description: The frontend only calls this with a non-empty, trimmed title.
+      responses:
+        "200":
+          description: Updated application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /boards/{boardId}/cards/{cardId}:
+    patch:
+      tags: [Cards]
+      operationId: updateCard
+      summary: Update any subset of a card's editable fields
+      description: >
+        Used for every detail-panel edit: title, notes, labelIds, dueDate, and
+        the whole checklist array (the frontend always resends the full
+        checklist, never a single item). The server should stamp updatedAt
+        itself. archived is not set through this endpoint — see the archive
+        endpoint below.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/BoardId"
+        - $ref: "#/components/parameters/CardId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CardPatch"
+      responses:
+        "200":
+          description: Updated application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Cards]
+      operationId: deleteCard
+      summary: Permanently delete a card
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/BoardId"
+        - $ref: "#/components/parameters/CardId"
+      responses:
+        "200":
+          description: Updated application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /boards/{boardId}/cards/{cardId}/move:
+    post:
+      tags: [Cards]
+      operationId: moveCard
+      summary: Move a card to a column and index (drag-and-drop, "Move to...", or keyboard move)
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/BoardId"
+        - $ref: "#/components/parameters/CardId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [toColumnId, toIndex]
+              properties:
+                toColumnId:
+                  type: string
+                  description: May be the card's current column (pure reorder).
+                toIndex:
+                  type: integer
+                  minimum: 0
+                  description: >
+                    Target position within the destination column's card list.
+                    The server should clamp this to [0, cards.length] rather
+                    than reject an out-of-range value.
+      responses:
+        "200":
+          description: Updated application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /boards/{boardId}/cards/{cardId}/duplicate:
+    post:
+      tags: [Cards]
+      operationId: duplicateCard
+      summary: Duplicate a card into the same column, right after the original
+      description: >
+        The frontend does not send a title; the backend generates the copy's
+        title (mock behavior appends " (salinan)") and a new id.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/BoardId"
+        - $ref: "#/components/parameters/CardId"
+      responses:
+        "200":
+          description: Updated application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /boards/{boardId}/cards/{cardId}/archive:
+    post:
+      tags: [Cards]
+      operationId: archiveCard
+      summary: Archive or unarchive a card
+      description: Archived cards are hidden from the board but not deleted.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/BoardId"
+        - $ref: "#/components/parameters/CardId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [archived]
+              properties:
+                archived:
+                  type: boolean
+      responses:
+        "200":
+          description: Updated application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /labels:
+    post:
+      tags: [Labels]
+      operationId: createLabel
+      summary: Create a label
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, color]
+              properties:
+                name:
+                  type: string
+                color:
+                  type: string
+                  description: Hex color, e.g. "#E8584F".
+      responses:
+        "200":
+          description: Updated application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+
+  /labels/{labelId}:
+    delete:
+      tags: [Labels]
+      operationId: deleteLabel
+      summary: Delete a label and remove it from every card that has it
+      security: []
+      parameters:
+        - name: labelId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /settings:
+    patch:
+      tags: [Settings]
+      operationId: updateSettings
+      summary: Update display settings (theme and/or accent color)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingsPatch"
+      responses:
+        "200":
+          description: Updated application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+
+  /settings/mark-exported:
+    post:
+      tags: [Settings, Backup]
+      operationId: markExported
+      summary: Record that the user just exported a backup
+      description: >
+        Called right after a successful export, so the "haven't exported in
+        30 days" reminder (specs.md 5.7.4) can reset its clock. Sets
+        settings.lastExportAt to the current server time.
+      security: []
+      responses:
+        "200":
+          description: Updated application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+
+  /export:
+    get:
+      tags: [Backup]
+      operationId: exportJSON
+      summary: Get a full snapshot of the data for download as a JSON file
+      description: Same shape as GET /state; the frontend saves the response directly to a .json file.
+      security: []
+      responses:
+        "200":
+          description: Full application state snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+
+  /import:
+    post:
+      tags: [Backup]
+      operationId: importJSON
+      summary: Import a previously exported JSON snapshot
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data, mode]
+              properties:
+                data:
+                  $ref: "#/components/schemas/AppState"
+                mode:
+                  type: string
+                  enum: [merge, replace]
+                  description: >
+                    "replace" discards all current data and adopts `data` as-is.
+                    "merge" keeps existing boards/labels and adds only the
+                    incoming boards/labels whose ids are not already present
+                    (existing ids are never overwritten).
+      responses:
+        "200":
+          description: Updated application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+        "400":
+          description: The uploaded file was not valid JSON or did not match the expected shape.
+
+  /reset:
+    post:
+      tags: [Backup]
+      operationId: clearAll
+      summary: Delete all data and reseed with the default starter board
+      description: >
+        Frontend requires a double confirmation before calling this. The
+        response is the fresh seeded state, not an empty one.
+      security: []
+      responses:
+        "200":
+          description: Freshly seeded application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+
+components:
+  parameters:
+    BoardId:
+      name: boardId
+      in: path
+      required: true
+      schema:
+        type: string
+    ColumnId:
+      name: columnId
+      in: path
+      required: true
+      schema:
+        type: string
+    CardId:
+      name: cardId
+      in: path
+      required: true
+      schema:
+        type: string
+
+  responses:
+    NotFound:
+      description: The referenced board, column, card, or label does not exist.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+
+  schemas:
+    AppState:
+      type: object
+      required: [version, activeBoardId, settings, labels, boards]
+      properties:
+        version:
+          type: integer
+          description: Data shape version, for future migrations (specs.md 7.2.4).
+          example: 1
+        activeBoardId:
+          type: string
+          nullable: true
+        settings:
+          $ref: "#/components/schemas/Settings"
+        labels:
+          type: array
+          items:
+            $ref: "#/components/schemas/Label"
+        boards:
+          type: array
+          items:
+            $ref: "#/components/schemas/Board"
+
+    Settings:
+      type: object
+      required: [theme, accent, lastExportAt]
+      properties:
+        theme:
+          type: string
+          enum: [auto, light, dark]
+        accent:
+          type: string
+          description: Accent color theme id. Current frontend offers "hangat", "hijau", "biru".
+          example: hangat
+        lastExportAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    SettingsPatch:
+      type: object
+      description: Any subset of Settings' editable fields.
+      properties:
+        theme:
+          type: string
+          enum: [auto, light, dark]
+        accent:
+          type: string
+
+    Label:
+      type: object
+      required: [id, name, color]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        color:
+          type: string
+          description: Hex color.
+
+    Board:
+      type: object
+      required: [id, title, createdAt, columns]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        columns:
+          type: array
+          items:
+            $ref: "#/components/schemas/Column"
+
+    Column:
+      type: object
+      required: [id, title, wipLimit, cards]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        wipLimit:
+          type: integer
+          nullable: true
+        cards:
+          type: array
+          items:
+            $ref: "#/components/schemas/Card"
+
+    Card:
+      type: object
+      required:
+        - id
+        - title
+        - notes
+        - labelIds
+        - dueDate
+        - checklist
+        - archived
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        notes:
+          type: string
+        labelIds:
+          type: array
+          items:
+            type: string
+        dueDate:
+          type: string
+          format: date
+          nullable: true
+        checklist:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChecklistItem"
+        archived:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ChecklistItem:
+      type: object
+      required: [id, text, done]
+      properties:
+        id:
+          type: string
+        text:
+          type: string
+        done:
+          type: boolean
+
+    CardPatch:
+      type: object
+      description: Any subset of Card's editable fields. The frontend never patches id, archived, createdAt, or updatedAt through this endpoint.
+      properties:
+        title:
+          type: string
+        notes:
+          type: string
+        labelIds:
+          type: array
+          items:
+            type: string
+        dueDate:
+          type: string
+          format: date
+          nullable: true
+        checklist:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChecklistItem"
+          description: Always sent as the complete array, replacing the previous one.
